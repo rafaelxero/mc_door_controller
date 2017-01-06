@@ -21,7 +21,7 @@ namespace mc_door {
 	virtual void reset(const mc_control::ControllerResetData & reset_data) override;
 
 	std::shared_ptr<mc_tasks::CoMTask> comTask;
-	std::shared_ptr<mc_tasks::OrientationTask> orTask;
+	std::shared_ptr<mc_tasks::OrientationTask> orBodyTask;
 	std::shared_ptr<mc_tasks::EndEffectorTask> efTask;
 	std::shared_ptr<mc_tasks::ComplianceTask> compTask;
 

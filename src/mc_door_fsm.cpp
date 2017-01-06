@@ -42,7 +42,7 @@ namespace mc_door {
 
 	std::vector<std::string> unactiveJoints = {"CHEST_JOINT1"};
 
-	ctl.orTask = std::make_shared<mc_tasks::OrientationTask>("BODY", ctl.robots(), 0, 2.0, 50.0);
+	ctl.orBodyTask = std::make_shared<mc_tasks::OrientationTask>("BODY", ctl.robots(), 0, 2.0, 50.0);
 
 	ctl.efTask = std::make_shared<mc_tasks::EndEffectorTask>("LARM_LINK6", ctl.robots(), 0, 5.0, 100.0);
 
@@ -50,13 +50,13 @@ namespace mc_door {
 
 	auto & door = ctl.robots().robots()[1];
 
-	ctl.orTask->orientation(Eigen::Matrix3d::Identity());
+	ctl.orBodyTask->orientation(Eigen::Matrix3d::Identity());
 
 	sva::PTransformd offset(sva::RotX(-M_PI/2), Eigen::Vector3d(0, 0.4, 0));
 	ctl.efTask->set_ef_pose(offset*door.surface("Handle").X_0_s(door));
 	
 	ctl.solver().addTask(ctl.comTask);
-	ctl.solver().addTask(ctl.orTask);
+	ctl.solver().addTask(ctl.orBodyTask);
 	ctl.solver().addTask(ctl.efTask);
 
 	ctl.solver().setContacts({
@@ -218,11 +218,7 @@ namespace mc_door {
 
 	ctl.solver().addTask(ctl.doorPostureTask);
 
-	auto qTargetDoor = ctl.doorPostureTask->posture();
-
-	ctl.doorPostureTask->posture(qTargetDoor);
-
-	targetAngle = 0.7854;
+	targetAngle = 0.5236;
 	turnSpeed = 0.01;
     }
 
@@ -231,15 +227,13 @@ namespace mc_door {
 	auto qDoor = ctl.robots().robots()[1].mbc().q;
 	auto qTarget = ctl.doorPostureTask->posture();
 
-	std::cout << qDoor[2][0] << std::endl;
-
 	if (qDoor[2][0] > targetAngle) {
 
 	    ctl.solver().removeTask(ctl.doorPostureTask);
 	    ctl.solver().addTask(ctl.efTask);
 	    ctl.efTask->reset();
 
-	    return nullptr;
+	    return new PushDoorState;
 	}
 	else {
 	    qTarget[2][0] += turnSpeed;
@@ -249,59 +243,102 @@ namespace mc_door {
 	return this;
     }
 
-    /*
-    void TurnKnobState::__init(DoorController & ctl) {
-	
-	auto & door = ctl.robots().robots()[1];
+    void PushDoorState::__init(DoorController & ctl) {
 
-	ctl.doorPostureTask = std::make_shared<tasks::qp::PostureTask>(ctl.robots().mbs(), 1, door.mbc().q, 5.0, 100.0);
+	std::vector<tasks::qp::JointGains> gains = {{"CHEST_JOINT1", 10.0}};
+
+	ctl.postureTask->posture(ctl.robots().robot().mbc().q);
+	ctl.postureTask->jointsGains(ctl.robots().mbs(), gains);
+	ctl.postureTask->weight(10.0);
 
 	ctl.solver().addTask(ctl.doorPostureTask);
 
-	auto qTargetDoor = ctl.doorPostureTask->posture();
+	targetAngle = -0.05;
+	pushSpeed = 0.01;
 
-	qTargetDoor[2][0] += 0.5;
-
-	ctl.doorPostureTask->posture(qTargetDoor);
+	//auto qTarget = ctl.doorPostureTask->posture();
+	//qTarget[1][0] = targetAngle;
+	//ctl.doorPostureTask->posture(qTarget);
     }
 
-    DoorTaskState * TurnKnobState::__update(DoorController & ctl) {
+    DoorTaskState * PushDoorState::__update(DoorController & ctl) {
 
 	auto qDoor = ctl.robots().robots()[1].mbc().q;
+	auto qTarget = ctl.doorPostureTask->posture();
 
-	std::cout << qDoor[2][0] << std::endl;
+	if (qDoor[1][0] < targetAngle) {
 
-	if (qDoor[2][0] > 0.5) {
-	    return nullptr;
+	    ctl.solver().removeTask(ctl.doorPostureTask);
+	    ctl.efTask->reset();
+
+	    return new ReturnKnobState;
+	}
+	else {
+	    //ctl.doorPostureTask->weight(ctl.doorPostureTask->weight() + 0.01);
+	    qTarget[1][0] -= pushSpeed;
+	    ctl.doorPostureTask->posture(qTarget);
 	}
 
 	return this;
     }
 
-    void PushDoorState::__init(DoorController & ctl) {
-    }
-
-    DoorTaskState * PushDoorState::__update(DoorController & ctl) {
-
-	return this;
-    }
-
     void ReturnKnobState::__init(DoorController & ctl) {
+
+	ctl.solver().addTask(ctl.doorPostureTask);
+
+	targetAngle = 0.0;
+	turnSpeed = 0.01;
     }
 
     DoorTaskState * ReturnKnobState::__update(DoorController & ctl) {
 
+	auto qDoor = ctl.robots().robots()[1].mbc().q;
+	auto qTarget = ctl.doorPostureTask->posture();
+
+	if (qDoor[2][0] < targetAngle) {
+
+	    ctl.solver().removeTask(ctl.doorPostureTask);
+	    ctl.solver().addTask(ctl.efTask);
+	    ctl.efTask->reset();
+
+	    return new ReleaseKnobState;
+	}
+	else {
+	    qTarget[2][0] -= turnSpeed;
+	    ctl.doorPostureTask->posture(qTarget);
+	}
+
 	return this;
     }
 
-    void ReleaseKnobState::__init(DoorController & ctl) {
+    void ReleaseKnobState::__init(DoorController & /*ctl*/) {
+
+	targetOpen = 1.0;
+	openSpeed = 0.002;
     }
 
     DoorTaskState * ReleaseKnobState::__update(DoorController & ctl) {
 
-	return this;
+	auto lG = ctl.grippers.at("l_gripper");
+	
+	if (lG->percentOpen[0] >= targetOpen) {
+
+	    lG->percentOpen[0] = targetOpen;
+
+	    ctl.solver().setContacts({
+		    {ctl.robots(), 0, 2, "LFullSole", "AllGround"},
+		    {ctl.robots(), 0, 2, "RFullSole", "AllGround"}
+		});
+
+	    return nullptr;
+	}
+	else {
+	    lG->percentOpen[0] += openSpeed;
+	    return this;
+	}
     }
 
+    /*
     void RetractArmState::__init(DoorController & ctl) {
     }
 

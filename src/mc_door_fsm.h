@@ -38,10 +38,10 @@ namespace mc_door {
     CREATE_STATE(SeparateDoorState, "Separate from the door state", tasks::qp::ContactId contactId;)
     CREATE_STATE(GraspKnobState, "Grasp the knob state", double targetClose; double closeSpeed;)
     CREATE_STATE(TurnKnobState, "Turn the knob state", double targetAngle; double turnSpeed;)
-    /*
     CREATE_STATE(PushDoorState, "Push the door state", double targetAngle; double pushSpeed;)
-    CREATE_STATE(ReturnKnobState, "Turn back the knob state",)
-    CREATE_STATE(ReleaseKnobState, "Release the knob state",)
+    CREATE_STATE(ReturnKnobState, "Turn back the knob state", double targetAngle; double turnSpeed;)
+    CREATE_STATE(ReleaseKnobState, "Release the knob state", double targetOpen; double openSpeed;)
+    /*
     CREATE_STATE(RetractArmState, "Retract the left arm state",)
     CREATE_STATE(GoHomeState, "Go back to home posture state",)
     */
